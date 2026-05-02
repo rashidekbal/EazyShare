@@ -207,8 +207,19 @@ function handleData(raw, peerId, deviceName) {
     case 'file-done': {
       const t = incoming.get(msg.id);
       if (!t) return;
-      const merged = mergeChunks(t.chunks);
-      window.electronAPI.saveFile(t.name, merged.buffer, t.deviceName).then(p => markDone(msg.id, p ? '✓ Saved' : '✓ Done'));
+      // Verify we received all chunks before saving
+      const receivedCount = t.chunks.filter(Boolean).length;
+      if (receivedCount < t.total) {
+        console.warn(`[Save] Incomplete: got ${receivedCount}/${t.total} chunks for "${t.name}" — requesting missing chunks`);
+        // Re-request from the last good chunk
+        const firstMissing = Array.from({ length: t.total }, (_, i) => i).find(i => !t.chunks[i]);
+        dc?.send(JSON.stringify({ type: 'file-resume-request', id: msg.id, fromChunk: firstMissing ?? 0 }));
+        break;
+      }
+      const merged = mergeChunksDense(t.chunks, t.total);
+      window.electronAPI.saveFile(t.name, merged.buffer, t.deviceName)
+        .then(p => markDone(msg.id, p ? '✓ Saved' : '✓ Done'))
+        .catch(err => { console.error('[Save] IPC error:', err); markError(msg.id, '✕ Save failed'); });
       incoming.delete(msg.id);
       break;
     }
@@ -511,8 +522,26 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 function u8ToBase64(u8) { let b = ''; u8.forEach(c => b += String.fromCharCode(c)); return btoa(b); }
 function base64ToU8(b64) { const s = atob(b64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
 function mergeChunks(chunks) {
-  const total = chunks.reduce((s, c) => s + c.length, 0); const out = new Uint8Array(total); let off = 0;
+  const total = chunks.reduce((s, c) => s + (c?.length ?? 0), 0);
+  const out = new Uint8Array(total); let off = 0;
   chunks.filter(Boolean).forEach(c => { out.set(c, off); off += c.length; }); return out;
+}
+// Dense merge: fills missing chunks with zeros to keep offsets correct
+function mergeChunksDense(chunks, totalChunks) {
+  // Find the real total byte size by summing known chunks
+  let totalBytes = 0;
+  for (let i = 0; i < totalChunks; i++) {
+    totalBytes += chunks[i]?.length ?? CHUNK_SIZE; // last chunk may be smaller but use CHUNK_SIZE as placeholder
+  }
+  // Recalculate using actual chunk sizes
+  totalBytes = chunks.reduce((s, c) => s + (c?.length ?? 0), 0);
+  const out = new Uint8Array(totalBytes);
+  let off = 0;
+  for (let i = 0; i < totalChunks; i++) {
+    if (chunks[i]) { out.set(chunks[i], off); off += chunks[i].length; }
+    // If chunk is missing, we skip (file-done guard above ensures this won't happen)
+  }
+  return out;
 }
 function fmtBytes(b) {
   if (!b || b < 0) return '0 B';

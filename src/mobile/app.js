@@ -192,8 +192,9 @@ async function streamChunks(id, fromChunk = 0) {
   s.speedStart      = Date.now();
   s.speedStartAcked = s.ackedCount || 0;
   if (fromChunk === 0) s.startTime = Date.now();
-  const buf = await s.file.arrayBuffer();
 
+  // Read lazily: slice file chunk-by-chunk to avoid loading all into RAM.
+  // This is critical for files > 200 MB on mobile devices.
   for (let i = fromChunk; i < s.totalChunks; i++) {
     s.nextChunk = i;
     if (!outgoing.has(id) || s.cancelled) return;
@@ -203,7 +204,9 @@ async function streamChunks(id, fromChunk = 0) {
       await sleep(50);
       if (!peerReady || s.paused || s.cancelled) { s.streaming = false; return; }
     }
-    const slice = buf.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+    // Slice only this chunk — never loads whole file into RAM
+    const blob  = s.file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+    const slice = await blob.arrayBuffer();
     dc.send(JSON.stringify({ type: 'file-chunk', id, index: i, total: s.totalChunks, data: u8ToB64(new Uint8Array(slice)) }));
     // Progress driven by file-ack only for consistency
   }
@@ -303,14 +306,14 @@ function markSentDone(id) {
   const bar = document.getElementById('tb-' + id); const pctEl = document.getElementById('tp-' + id);
   if (bar)   { bar.style.width = '100%'; bar.className = 't-bar done'; }
   if (pctEl) { pctEl.textContent = '✓ Sent'; pctEl.className = 't-pct done'; }
-  document.querySelector(`#ti-${id} .t-x`)?.remove();
+  document.querySelectorAll(`#ti-${id} .t-x`).forEach(b => b.remove());
   document.getElementById('ti-' + id)?.setAttribute('data-done', '1');
 }
 function markErr(id, label) {
   const bar = document.getElementById('tb-' + id); const pctEl = document.getElementById('tp-' + id);
   if (bar)   bar.className = 't-bar error';
   if (pctEl) { pctEl.textContent = label; pctEl.className = 't-pct error'; }
-  document.querySelector(`#ti-${id} .t-x`)?.remove();
+  document.querySelectorAll(`#ti-${id} .t-x`).forEach(b => b.remove());
   document.getElementById('ti-' + id)?.setAttribute('data-done', '1');
 }
 function clearDone() {

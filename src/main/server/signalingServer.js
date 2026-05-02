@@ -24,6 +24,25 @@ function startSignalingServer(port) {
           clientType = msg.clientType;
           const deviceName = msg.deviceName || 'Unknown Device';
 
+          // ── Evict stale client with same name+type (phone refresh) ──
+          // If phone refreshes, it gets a new random ID but the same device name.
+          // The old WS stays open until TCP timeout — we close it immediately.
+          for (const [oldId, oldClient] of clients) {
+            if (oldClient.type === clientType && oldClient.deviceName === deviceName && oldId !== clientId) {
+              console.log(`[WS] Evicting stale "${deviceName}" (${oldId}) — replaced by ${clientId}`);
+              // Notify opposite side the old peer is gone
+              broadcastToOpposite(clientType, {
+                type:       'peer-disconnected',
+                peerType:   clientType,
+                peerId:     oldId,
+                deviceName: oldClient.deviceName,
+              });
+              clients.delete(oldId);
+              // Force-close the stale socket (silently)
+              try { oldClient.ws.terminate(); } catch (_) {}
+            }
+          }
+
           clients.set(clientId, { ws, type: clientType, deviceName });
           console.log(`[WS] + ${clientType} "${deviceName}" (${clientId})`);
 
