@@ -3,18 +3,28 @@ import { u8ToBase64, base64ToU8, mergeChunksDense, fmtBytes, fmtSpeed, sleep } f
 import { addTransferItem, updateProgress, updateLabel, updatePauseBtn, markDone, markError } from './ui.js';
 
 export function saveState() {
-  const toSave = [...outgoing.values()]
-    .filter(t => !t.done && !t.cancelled && t.filePath)
-    .map(({ name, size, totalChunks, nextChunk, filePath, targetPeerId, deviceName: dn }) => {
-      const peer = peers.get(targetPeerId);
-      return { name, size, totalChunks, nextChunk, filePath, targetPeerId, deviceName: dn || peer?.deviceName || 'Unknown' };
+  const toSave = [...outgoing.entries()]
+    .filter(([id, t]) => !t.done && !t.cancelled && t.filePath)
+    .map(([id, t]) => {
+      const peer = peers.get(t.targetPeerId);
+      return { 
+        id, 
+        name: t.name, 
+        size: t.size, 
+        totalChunks: t.totalChunks, 
+        nextChunk: t.nextChunk, 
+        filePath: t.filePath, 
+        targetPeerId: t.targetPeerId, 
+        deviceName: t.deviceName || peer?.deviceName || 'Unknown' 
+      };
     });
   window.electronAPI.saveTransferState(toSave);
 }
 
 export function restoreTransfer(saved) {
-  outgoing.set(saved.id, { ...saved, file: null, ackedCount: 0, streaming: false, paused: true, done: false, cancelled: false, startTime: Date.now() });
-  addTransferItem(saved.id, saved.name, saved.size, 'send', saved.deviceName, true);
+  outgoing.set(saved.id, { ...saved, file: null, ackedCount: saved.nextChunk || 0, streaming: false, paused: true, done: false, cancelled: false, startTime: Date.now() });
+  const pct = saved.totalChunks > 0 ? (saved.nextChunk / saved.totalChunks) * 100 : 0;
+  addTransferItem(saved.id, saved.name, saved.size, 'send', saved.deviceName, pct);
 }
 
 export async function queueFile(file, peerId) {
@@ -100,9 +110,17 @@ export function resumeTransfer(id) {
   const t = outgoing.get(id);
   if (!t || t.done || t.cancelled) return;
   const peer = peers.get(t.targetPeerId);
-  if (!peer?.ready) { updateLabel(id, '⚠ Device offline', 'warn'); return; }
+  if (!peer?.ready) {
+    const currentAcked = Math.max(t.ackedCount || 0, t.nextChunk || 0);
+    const pct = t.totalChunks > 0 ? (currentAcked / t.totalChunks) * 100 : 0;
+    updateProgress(id, pct, '⚠ Device offline', 'warn'); 
+    return; 
+  }
   t.paused = false; updatePauseBtn(id, false);
-  updateLabel(id, `▶ Resuming from ${fmtBytes(t.nextChunk * CHUNK_SIZE)}…`, 'prog');
+  t.ackedCount = t.nextChunk; // Sync ackedCount
+  const pct = t.totalChunks > 0 ? (t.ackedCount / t.totalChunks) * 100 : 0;
+  const confirmedBytes = Math.min(t.ackedCount * CHUNK_SIZE, t.size);
+  updateProgress(id, pct, `▶ Resuming from ${fmtBytes(confirmedBytes)}…`);
   streamChunks(id, t.nextChunk);
 }
 
@@ -126,10 +144,12 @@ export function togglePause(id) {
     updatePauseBtn(id, t.paused);
     const peer = peers.get(t.sourcePeerId);
     if (t.paused) {
-      updateLabel(id, `⏸ Paused`, 'warn');
+      const pct = t.totalChunks > 0 ? (t.ackedCount / t.totalChunks) * 100 : 0;
+      updateProgress(id, pct, `⏸ Paused`, 'warn');
       if (peer?.dc?.readyState === 'open') peer.dc.send(JSON.stringify({ type: 'file-pause', id }));
     } else {
-      updateLabel(id, `▶ Resuming…`, 'prog');
+      const pct = t.totalChunks > 0 ? (t.ackedCount / t.totalChunks) * 100 : 0;
+      updateProgress(id, pct, `▶ Resuming…`, 'prog');
       if (peer?.dc?.readyState === 'open') peer.dc.send(JSON.stringify({ type: 'file-resume', id }));
     }
   }
@@ -169,11 +189,25 @@ export function handleIncomingChunk(id, index, dataB64, dc) {
     return;
   }
   
+  // Track received indices to avoid double-counting if duplicate chunks arrive
+  t.receivedIndices = t.receivedIndices || new Set();
+  if (t.receivedIndices.has(index)) {
+    dc?.send(JSON.stringify({ type: 'file-ack', id, index }));
+    return;
+  }
+  t.receivedIndices.add(index);
+
   if (t.tempPath) {
     window.electronAPI.incomingWrite({ tempPath: t.tempPath, data, index });
     t.receivedCount++;
+    if (!t.startTime) t.startTime = Date.now();
+    
+    const elapsed = (Date.now() - t.startTime) / 1000 || 1;
+    const speed   = (t.receivedCount - (t.receivedChunks || 0)) * CHUNK_SIZE / elapsed;
+    
     const pct = (t.receivedCount / t.total) * 100;
-    updateProgress(id, pct, `${fmtSpeed(0)} · ${fmtBytes(t.receivedCount * CHUNK_SIZE)} / ${fmtBytes(t.size)}`);
+    const confirmedBytes = Math.min(t.receivedCount * CHUNK_SIZE, t.size);
+    updateProgress(id, pct, `${fmtSpeed(speed)} · ${fmtBytes(confirmedBytes)} / ${fmtBytes(t.size)}`);
     dc?.send(JSON.stringify({ type: 'file-ack', id, index }));
   }
 }
@@ -206,13 +240,17 @@ export function handleData(raw, peerId, deviceName) {
         if (receivedChunks > 0) {
           t.receivedCount = receivedChunks;
           t.receivedChunks = receivedChunks;
-          updateProgress(msg.id, (receivedChunks / t.total) * 100, `${fmtBytes(receivedChunks * CHUNK_SIZE)} / ${fmtBytes(t.size)}`);
+          const pct = (receivedChunks / t.total) * 100;
+          const confirmedBytes = Math.min(receivedChunks * CHUNK_SIZE, t.size);
+          updateProgress(msg.id, pct, `${fmtBytes(confirmedBytes)} / ${fmtBytes(t.size)}`);
         }
         dc?.send(JSON.stringify({ type: 'file-resume-request', id: msg.id, fromChunk: receivedChunks }));
 
         if (t.bufferedChunks) {
+          t.receivedIndices = t.receivedIndices || new Set();
           t.bufferedChunks.forEach(c => {
-            if (c.index >= receivedChunks) {
+            if (c.index >= receivedChunks && !t.receivedIndices.has(c.index)) {
+              t.receivedIndices.add(c.index);
               window.electronAPI.incomingWrite({ tempPath: t.tempPath, data: c.data, index: c.index });
               t.receivedCount++;
             }
@@ -273,14 +311,19 @@ export function handleData(raw, peerId, deviceName) {
       let t = outgoing.get(msg.id); 
       if (t) {
         pauseTransfer(msg.id);
-        updateLabel(msg.id, `⏸ Paused by receiver`, 'warn');
+        const currentAcked = Math.max(t.ackedCount || 0, t.nextChunk || 0);
+        const pct = t.totalChunks > 0 ? (currentAcked / t.totalChunks) * 100 : 0;
+        const confirmedBytes = Math.min(currentAcked * CHUNK_SIZE, t.size);
+        updateProgress(msg.id, pct, `⏸ Paused by receiver — ${fmtBytes(confirmedBytes)} / ${fmtBytes(t.size)}`, 'warn');
         return;
       }
       t = incoming.get(msg.id);
       if (t) {
         t.paused = true;
         updatePauseBtn(msg.id, true);
-        updateLabel(msg.id, `⏸ Paused by sender`, 'warn');
+        const pct = t.total > 0 ? (t.receivedCount / t.total) * 100 : 0;
+        const confirmedBytes = Math.min(t.receivedCount * CHUNK_SIZE, t.size);
+        updateProgress(msg.id, pct, `⏸ Paused by sender — ${fmtBytes(confirmedBytes)} / ${fmtBytes(t.size)}`, 'warn');
       }
       break;
     }
@@ -294,7 +337,8 @@ export function handleData(raw, peerId, deviceName) {
       if (t) {
         t.paused = false;
         updatePauseBtn(msg.id, false);
-        updateLabel(msg.id, `▶ Resuming…`, 'prog');
+        const pct = t.total > 0 ? (t.receivedCount / t.total) * 100 : 0;
+        updateProgress(msg.id, pct, `▶ Resuming…`, 'prog');
       }
       break;
     }
@@ -302,7 +346,13 @@ export function handleData(raw, peerId, deviceName) {
       const t = outgoing.get(msg.id);
       if (!t || t.done || t.cancelled) return;
       t.nextChunk = msg.fromChunk || 0;
-      if (t.paused) { updateLabel(msg.id, `⏸ Paused — click ▶ to resume`, 'warn'); updatePauseBtn(msg.id, true); }
+      t.ackedCount = t.nextChunk; // Sync ackedCount
+      
+      const pct = (t.ackedCount / t.totalChunks) * 100;
+      const confirmedBytes = Math.min(t.ackedCount * CHUNK_SIZE, t.size);
+      updateProgress(msg.id, pct, t.paused ? `⏸ Paused — click ▶ to resume` : `▶ Resuming from ${fmtBytes(confirmedBytes)}…`, t.paused ? 'warn' : 'prog');
+
+      if (t.paused) { updatePauseBtn(msg.id, true); }
       else streamChunks(msg.id, t.nextChunk);
       break;
     }

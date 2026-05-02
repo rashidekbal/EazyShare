@@ -1,6 +1,6 @@
 {
   "name": "eazyshare",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "LAN file sharing via WebRTC — no internet required",
   "main": "src/main/index.js",
   "scripts": {

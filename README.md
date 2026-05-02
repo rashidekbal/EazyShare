@@ -244,6 +244,12 @@ Auto-detected from the browser user agent (e.g. `iPhone`, `Android Phone`) and s
 
 ---
 
+## 🛠 Developer Guide
+
+For detailed technical documentation on the architecture, communication protocols, and project internal logic, please refer to the [Developer Guide](DEVELOPER_GUIDE.md).
+
+---
+
 ## 📄 License
 
 MIT © [rasidekbal](https://github.com/rashidekbal)

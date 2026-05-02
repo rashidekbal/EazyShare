@@ -38,7 +38,8 @@ export async function resumePendingFile(id, file) {
   t.totalChunks = Math.ceil(file.size / CHUNK_SIZE);
   t.paused = false;
   t.startTime = Date.now();
-  updateLabel(id, '🔄 Negotiating resume...');
+  const initialPct = t.totalChunks > 0 ? (t.nextChunk / t.totalChunks) * 100 : 0;
+  updateProg(id, initialPct, '🔄 Negotiating resume...');
   state.dc.send(JSON.stringify({ type: 'file-start', id, name: t.name, size: t.size, totalChunks: t.totalChunks, isResume: true }));
 }
 
@@ -76,7 +77,8 @@ export function togglePause(id) {
     if (t.paused || !t.streaming) {
       if (!state.peerReady) { updateLabel(id, '⚠ PC offline'); return; }
       t.paused = false; updPauseBtn(id, false);
-      updateLabel(id, `▶ Resuming from ${fmtBytes(t.nextChunk * CHUNK_SIZE)}…`);
+      const pct = t.totalChunks > 0 ? (t.nextChunk / t.totalChunks) * 100 : 0;
+      updateProg(id, pct, `▶ Resuming from ${fmtBytes(t.nextChunk * CHUNK_SIZE)}…`);
       streamChunks(id, t.nextChunk);
     } else {
       t.paused = true;
@@ -94,10 +96,12 @@ export function togglePause(id) {
     t.paused = !t.paused;
     updPauseBtn(id, t.paused);
     if (t.paused) {
-      updateLabel(id, `⏸ Paused`);
+      const pct = t.total > 0 ? (t.chunks.filter(Boolean).length / t.total) * 100 : 0;
+      updateProg(id, pct, `⏸ Paused`);
       if (state.dc?.readyState === 'open') state.dc.send(JSON.stringify({ type: 'file-pause', id }));
     } else {
-      updateLabel(id, `▶ Resuming…`);
+      const pct = t.total > 0 ? (t.chunks.filter(Boolean).length / t.total) * 100 : 0;
+      updateProg(id, pct, `▶ Resuming…`);
       if (state.dc?.readyState === 'open') state.dc.send(JSON.stringify({ type: 'file-resume', id }));
     }
   }
@@ -139,8 +143,10 @@ export function handleData(raw) {
       const t = incoming.get(msg.id); if (!t) return;
       t.chunks[msg.index] = b64ToU8(msg.data);
       const done  = t.chunks.filter(Boolean).length;
+      if (!t.startTime) t.startTime = Date.now();
       const speed = (done * CHUNK_SIZE) / ((Date.now() - t.startTime) / 1000 || 1);
-      updateProg(msg.id, (done / t.total) * 100, `${fmtSpeed(speed)} · ${fmtBytes(done * CHUNK_SIZE)} / ${fmtBytes(t.size)}`);
+      const confirmed = Math.min(done * CHUNK_SIZE, t.size);
+      updateProg(msg.id, (done / t.total) * 100, `${fmtSpeed(speed)} · ${fmtBytes(confirmed)} / ${fmtBytes(t.size)}`);
       state.dc.send(JSON.stringify({ type: 'file-ack', id: msg.id, index: msg.index }));
       break;
     }
@@ -162,8 +168,10 @@ export function handleData(raw) {
       if (t) {
         t.paused = true;
         updPauseBtn(msg.id, true);
-        const confirmed = Math.min((t.ackedCount || 0) * CHUNK_SIZE, t.size);
-        const pct       = t.totalChunks > 0 ? ((t.ackedCount || 0) / t.totalChunks) * 100 : 0;
+        // Ensure ackedCount is at least nextChunk to avoid jumping back to 0% on resume-pause race
+        const currentAcked = Math.max(t.ackedCount || 0, t.nextChunk || 0);
+        const confirmed = Math.min(currentAcked * CHUNK_SIZE, t.size);
+        const pct       = t.totalChunks > 0 ? (currentAcked / t.totalChunks) * 100 : 0;
         updateProg(msg.id, pct, `⏸ Paused by PC — ${fmtBytes(confirmed)} / ${fmtBytes(t.size)}`);
         saveOutgoingState();
       }
@@ -171,7 +179,9 @@ export function handleData(raw) {
       if (t) {
         t.paused = true;
         updPauseBtn(msg.id, true);
-        updateLabel(msg.id, `⏸ Paused by PC`);
+        const doneCount = t.chunks.filter(Boolean).length;
+        const pct = t.total > 0 ? (doneCount / t.total) * 100 : 0;
+        updateProg(msg.id, pct, `⏸ Paused by PC`);
       }
       break;
     }
@@ -181,7 +191,8 @@ export function handleData(raw) {
         if (t.paused) {
           t.paused = false; updPauseBtn(msg.id, false);
           t.ackedCount = t.nextChunk || 0;
-          updateLabel(msg.id, `▶ Resuming from ${fmtBytes(t.nextChunk * CHUNK_SIZE)}…`);
+          const pct = t.totalChunks > 0 ? (t.ackedCount / t.totalChunks) * 100 : 0;
+          updateProg(msg.id, pct, `▶ Resuming from ${fmtBytes(t.ackedCount * CHUNK_SIZE)}…`);
           saveOutgoingState();
           streamChunks(msg.id, t.nextChunk);
         }
@@ -190,7 +201,8 @@ export function handleData(raw) {
       if (t) {
         t.paused = false;
         updPauseBtn(msg.id, false);
-        updateLabel(msg.id, `▶ Resuming…`);
+        const pct = t.total > 0 ? (t.chunks.filter(Boolean).length / t.total) * 100 : 0;
+        updateProg(msg.id, pct, `▶ Resuming…`);
       }
       break;
     }
@@ -198,7 +210,10 @@ export function handleData(raw) {
       let t = outgoing.get(msg.id);
       if (t && t.file && !t.cancelled) {
         t.nextChunk = msg.fromChunk || 0;
-        updateLabel(msg.id, `▶ Resuming from ${fmtBytes(t.nextChunk * CHUNK_SIZE)}…`);
+        t.ackedCount = t.nextChunk; // Sync ackedCount immediately
+        const confirmed = Math.min(t.nextChunk * CHUNK_SIZE, t.file.size);
+        const pct       = t.totalChunks > 0 ? (t.nextChunk / t.totalChunks) * 100 : 0;
+        updateProg(msg.id, pct, `▶ Resuming from ${fmtBytes(confirmed)}…`);
         streamChunks(msg.id, t.nextChunk);
       }
       break;

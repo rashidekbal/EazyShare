@@ -92,10 +92,11 @@ export function updateDeviceCard(peerId, online) {
 window.togglePause = function(id) { togglePause(id); };
 window.cancelTransfer = function(id) { cancelTransfer(id); };
 
-export function addTransferItem(id, name, size, dir, devName, restored = false) {
+export function addTransferItem(id, name, size, dir, devName, initialPct = 0) {
   dom.emptyState.style.display = 'none';
   const el = document.createElement('div');
   el.className = 'transfer-item'; el.id = 'ti-' + id;
+  const isRestored = initialPct > 0;
   el.innerHTML = `
     <div class="t-icon">${dir === 'send' ? '⬆' : '⬇'}</div>
     <div class="t-info">
@@ -103,12 +104,12 @@ export function addTransferItem(id, name, size, dir, devName, restored = false) 
       <div class="t-meta">
         <span class="t-badge ${dir}">${dir === 'send' ? escH(devName) || 'Sending' : escH(devName) || 'Receiving'}</span>
         <span>${fmtBytes(size)}</span>
-        <span class="t-speed" id="tm-${id}">${restored ? '⏸ Waiting for device…' : 'Waiting…'}</span>
+        <span class="t-speed" id="tm-${id}">${isRestored ? `⏸ Resumed — ${fmtBytes(Math.min(initialPct/100*size, size))} ready` : 'Waiting…'}</span>
       </div>
-      <div class="t-progress-wrap"><div class="t-progress-bar" id="tp-${id}" style="width:${restored ? '0%' : '0%'}"></div></div>
+      <div class="t-progress-wrap"><div class="t-progress-bar" id="tp-${id}" style="width:${initialPct.toFixed(1)}%"></div></div>
     </div>
     <div class="t-right">
-      <div class="t-status prog" id="ts-${id}">0%</div>
+      <div class="t-status prog" id="ts-${id}">${initialPct.toFixed(0)}%</div>
       <button class="t-pause-btn" id="tbtn-${id}" onclick="togglePause('${id}')" title="Pause">⏸</button>
       <button class="t-cancel" onclick="cancelTransfer('${id}')" title="Cancel">✕</button>
     </div>`;
