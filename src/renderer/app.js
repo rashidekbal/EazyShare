@@ -50,9 +50,9 @@ document.getElementById('btn-open-folder').onclick = () => window.electronAPI.op
 document.getElementById('btn-clear').onclick    = clearDone;
 
 // ── Drop zone ─────────────────────────────────────────────
-dropZone.onclick = () => { if (activePeerId) fileInput.click(); };
+dropZone.onclick = () => { if (selectedPeers.size > 0) fileInput.click(); };
 fileInput.onchange = (e) => { handleFiles([...e.target.files]); e.target.value = ''; };
-dropZone.addEventListener('dragover', (e) => { e.preventDefault(); if (activePeerId) dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); if (selectedPeers.size > 0) dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
 dropZone.addEventListener('drop', (e) => {
   e.preventDefault(); dropZone.classList.remove('drag-over');
