@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="theme-color" content="#09090f" />
+  <title>eazyShare</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="logo">
+      <div class="logo-dot"></div>
+      <span>eazyShare</span>
+    </div>
+    <div class="device-name-wrap">
+      <span id="device-name-display" class="dev-name-lbl" onclick="this.style.display='none';document.getElementById('device-name-input').style.display='';document.getElementById('device-name-input').focus()"></span>
+      <input id="device-name-input" class="dev-name-inp" style="display:none" type="text" placeholder="Device name"
+        onblur="saveDeviceName();this.style.display='none';document.getElementById('device-name-display').style.display=''"
+        onkeydown="if(event.key==='Enter'){this.blur();}" />
+    </div>
+    <div class="conn-badge" id="conn-badge">
+      <span class="conn-dot" id="conn-dot"></span>
+      <span id="conn-label">Connecting…</span>
+    </div>
+  </header>
+
+  <!-- Status bar -->
+  <div class="status-bar" id="status-bar">
+    <div class="status-text" id="status-text">Setting up connection…</div>
+  </div>
+
+  <!-- Main sections -->
+  <main class="app-main">
+
+    <!-- Send section -->
+    <section class="card">
+      <div class="card-title">📤 Send to PC</div>
+      <div class="drop-area" id="drop-area" onclick="document.getElementById('file-pick').click()">
+        <div class="drop-icon-m">＋</div>
+        <div class="drop-hint">Tap to select files</div>
+        <input type="file" id="file-pick" multiple hidden />
+      </div>
+    </section>
+
+    <!-- Transfers -->
+    <section class="card transfers-card">
+      <div class="card-title-row">
+        <span class="card-title">⇅ Transfers</span>
+        <button class="text-btn" onclick="clearDone()">Clear</button>
+      </div>
+      <div class="transfer-list" id="transfer-list">
+        <div class="empty" id="empty-state">No transfers yet</div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

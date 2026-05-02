@@ -1,0 +1,283 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #09090f;
+  --surface:   #12121e;
+  --surface2:  #1a1a2e;
+  --border:    rgba(255,255,255,0.08);
+  --accent:    #7c5cfc;
+  --accent2:   #a78bfa;
+  --green:     #22d3a5;
+  --red:       #f87171;
+  --text:      #e8e8f0;
+  --text-muted:#7878a0;
+  --radius:    16px;
+}
+
+html { -webkit-tap-highlight-color: transparent; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  min-height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(9,9,15,0.95);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(10px);
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 17px;
+}
+.logo-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--green));
+  box-shadow: 0 0 10px var(--accent);
+  animation: glow 2s ease-in-out infinite;
+}
+@keyframes glow {
+  0%,100% { box-shadow: 0 0 6px var(--accent); }
+  50%      { box-shadow: 0 0 16px var(--accent); }
+}
+
+.device-name-wrap { flex: 1; text-align: center; padding: 0 8px; }
+.dev-name-lbl {
+  font-size: 11px;
+  color: var(--accent2);
+  cursor: pointer;
+  border-bottom: 1px dashed rgba(167,139,250,0.4);
+  padding-bottom: 1px;
+}
+.dev-name-lbl:hover { color: var(--text); }
+.dev-name-inp {
+  background: rgba(124,92,252,0.1);
+  border: 1px solid rgba(124,92,252,0.4);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 3px 8px;
+  width: 130px;
+  text-align: center;
+  outline: none;
+}
+
+.conn-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.conn-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: background 0.3s, box-shadow 0.3s;
+}
+.conn-dot.connecting { background: #fbbf24; box-shadow: 0 0 6px #fbbf24; }
+.conn-dot.ready      { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.conn-dot.error      { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+
+/* ── Status bar ─────────────────────────────────────────── */
+.status-bar {
+  background: rgba(124,92,252,0.08);
+  border-bottom: 1px solid rgba(124,92,252,0.15);
+  padding: 8px 18px;
+  font-size: 12px;
+  color: var(--accent2);
+  min-height: 34px;
+  transition: background 0.3s;
+}
+.status-bar.ok     { background: rgba(34,211,165,0.06); border-color: rgba(34,211,165,0.15); }
+.status-bar.ok .status-text { color: var(--green); }
+.status-bar.error  { background: rgba(248,113,113,0.06); border-color: rgba(248,113,113,0.15); }
+.status-bar.error .status-text { color: var(--red); }
+
+/* ── Main ───────────────────────────────────────────────── */
+.app-main {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Card ───────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 12px;
+}
+.card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.text-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent2);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+/* ── Drop area ──────────────────────────────────────────── */
+.drop-area {
+  border: 2px dashed rgba(124,92,252,0.35);
+  border-radius: 12px;
+  padding: 30px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.drop-area:active {
+  background: rgba(124,92,252,0.1);
+  border-color: var(--accent);
+}
+.drop-icon-m {
+  font-size: 36px;
+  line-height: 1;
+  margin-bottom: 8px;
+  color: var(--accent2);
+}
+.drop-hint {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* ── Transfer list ──────────────────────────────────────── */
+.transfer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+.empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 20px;
+}
+
+/* ── Transfer item ──────────────────────────────────────── */
+.t-item {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  animation: slide-in 0.2s ease;
+}
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.t-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.t-ico { font-size: 22px; }
+.t-info { flex: 1; overflow: hidden; }
+.t-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.t-size { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.t-pct  { font-size: 12px; font-weight: 600; color: var(--accent2); flex-shrink: 0; min-width: 42px; text-align: right; }
+.t-pct.done  { color: var(--green); }
+.t-pct.error { color: var(--red); }
+.t-x {
+  background: transparent;
+  border: 1px solid rgba(248,113,113,0.3);
+  border-radius: 5px;
+  color: var(--red);
+  font-size: 11px;
+  width: 24px; height: 24px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.t-x:active { background: rgba(248,113,113,0.15); }
+.t-x.pause-x {
+  border-color: rgba(251,191,36,0.4);
+  color: #fbbf24;
+}
+.t-x.pause-x.resuming {
+  border-color: rgba(34,211,165,0.4);
+  color: var(--green);
+}
+
+.t-bar-wrap {
+  height: 4px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.t-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  transition: width 0.2s ease;
+}
+.t-bar.done  { background: var(--green); }
+.t-bar.error { background: var(--red); }
+
+.dl-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(34,211,165,0.1);
+  border: 1px solid rgba(34,211,165,0.3);
+  border-radius: 10px;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.dl-btn:active { background: rgba(34,211,165,0.2); }

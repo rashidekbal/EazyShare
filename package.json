@@ -1,0 +1,29 @@
+{
+  "name": "eazyshare",
+  "version": "1.0.0",
+  "description": "LAN file sharing via WebRTC — no internet required",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder"
+  },
+  "keywords": [
+    "file-sharing",
+    "webrtc",
+    "lan",
+    "electron"
+  ],
+  "author": "eazyShare",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.2.1",
+    "qrcode": "^1.5.4",
+    "uuid": "^14.0.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "electron": "^41.5.0",
+    "electron-builder": "^26.8.1"
+  }
+}

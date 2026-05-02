@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>eazyShare</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Custom title bar -->
+  <div class="titlebar">
+    <div class="titlebar-brand">
+      <div class="brand-dot"></div>
+      <span>eazyShare</span>
+    </div>
+    <div class="titlebar-controls">
+      <button id="btn-minimize" class="ctrl-btn">─</button>
+      <button id="btn-maximize" class="ctrl-btn">□</button>
+      <button id="btn-close"    class="ctrl-btn close">✕</button>
+    </div>
+  </div>
+
+  <div class="layout">
+
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+
+      <!-- QR Code -->
+      <div class="qr-card">
+        <div class="qr-label">Scan to connect</div>
+        <div class="qr-wrap">
+          <img id="qr-img" src="" alt="QR Code" />
+          <div class="qr-pulse"></div>
+        </div>
+        <div id="url-display" class="url-display">—</div>
+      </div>
+
+      <!-- Connected Devices -->
+      <div class="section-label">Connected Devices</div>
+      <div class="devices-list" id="devices-list">
+        <div class="no-devices" id="no-devices">
+          No phones connected yet
+        </div>
+      </div>
+
+      <!-- Footer buttons -->
+      <button class="folder-btn" id="btn-open-folder">
+        📁 Open Downloads
+      </button>
+
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="content">
+
+      <!-- Status bar -->
+      <div class="status-bar-top" id="status-bar-top">
+        <div class="status-dot" id="status-dot"></div>
+        <div class="status-title" id="status-title">Starting…</div>
+        <div class="status-sub"   id="status-sub">Initializing</div>
+      </div>
+
+      <!-- Active device indicator + Drop zone -->
+      <div class="send-panel">
+        <div class="active-device-hint" id="active-hint">
+          Select a device from the sidebar to send files
+        </div>
+        <div class="drop-zone disabled" id="drop-zone">
+          <div class="drop-icon">⬆</div>
+          <div class="drop-title" id="drop-title">Drop files to send</div>
+          <div class="drop-sub">or click to browse</div>
+          <input type="file" id="file-input" multiple hidden />
+        </div>
+      </div>
+
+      <!-- Transfer list -->
+      <div class="transfers-section">
+        <div class="section-header">
+          <span class="section-title">Transfers</span>
+          <button class="clear-btn" id="btn-clear">Clear done</button>
+        </div>
+        <div class="transfer-list" id="transfer-list">
+          <div class="empty-state" id="empty-state">
+            No transfers yet
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
