@@ -8,8 +8,8 @@ let tray = null;
  * @param {BrowserWindow} mainWindow
  */
 function createTray(mainWindow) {
-  const iconPath = path.join(__dirname, '../../assets/icon.png');
-  const icon     = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+  const iconPath = path.join(__dirname, '../assets/icon.png');
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
 
   tray = new Tray(icon);
   tray.setToolTip('eazyShare — LAN File Sharing');
