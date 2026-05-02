@@ -277,13 +277,25 @@ function updPauseBtn(id, isPaused) {
   btn.classList.toggle('resuming', isPaused);
 }
 function markDoneWithDL(id, blob, name) {
-  const bar = document.getElementById('tb-' + id); const pctEl = document.getElementById('tp-' + id); const dlDiv = document.getElementById('tdl-' + id);
+  const bar   = document.getElementById('tb-' + id);
+  const pctEl = document.getElementById('tp-' + id);
+  const dlDiv = document.getElementById('tdl-' + id);
   if (bar)   { bar.style.width = '100%'; bar.className = 't-bar done'; }
-  if (pctEl) { pctEl.textContent = '✓'; pctEl.className = 't-pct done'; }
+  if (pctEl) { pctEl.textContent = '✓ Saved'; pctEl.className = 't-pct done'; }
   document.querySelector(`#ti-${id} .t-x`)?.remove();
   if (dlDiv) {
     const url = URL.createObjectURL(blob);
-    dlDiv.innerHTML = `<a class="dl-btn" href="${url}" download="${escH(name)}">⬇ Save ${escH(name)}</a>`;
+    // Build anchor with raw name (no HTML escaping on download attr)
+    const a       = document.createElement('a');
+    a.href        = url;
+    a.download    = name;
+    a.className   = 'dl-btn';
+    a.textContent = `⬇ ${name}`;
+    dlDiv.appendChild(a);
+    // Auto-save: trigger download without user needing to tap
+    a.click();
+    // Revoke after a short delay to free memory
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
   document.getElementById('ti-' + id)?.setAttribute('data-done', '1');
 }

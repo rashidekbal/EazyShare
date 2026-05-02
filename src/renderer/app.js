@@ -142,30 +142,41 @@ function setupDC(dc, peerId, deviceName) {
       }
     }
   };
-  dc.onclose  = () => { const p = peers.get(peerId); if (p) p.ready = false; updateDeviceCard(peerId, false); };
+  dc.onclose  = () => onPeerDisconnect(peerId);
   dc.onmessage = (e) => handleData(e.data, peerId, deviceName);
 }
 
 function onPeerDisconnect(peerId) {
-  const p = peers.get(peerId);
-  if (!p) return;
-  p.ready = false;
-  updateDeviceCard(peerId, false);
-  // Uncheck disconnected device
-  selectedPeers.delete(peerId);
-  const chk = document.getElementById('dchk-' + peerId);
-  if (chk) chk.checked = false;
-  updateSendHint();
+  if (!peers.has(peerId)) return;
+
+  // Mark in-progress transfers for this device as disconnected
   for (const [id, t] of outgoing) {
     if (t.targetPeerId === peerId && !t.done && !t.cancelled) {
       t.streaming = false;
       updateLabel(id, '⏸ Device disconnected', 'warn');
     }
   }
+
+  // Remove peer state
+  peers.delete(peerId);
+  selectedPeers.delete(peerId);
+
+  // Remove device card from sidebar
+  document.getElementById('dc-' + peerId)?.remove();
+
+  // Show placeholder if no devices remain
+  if (devList.querySelectorAll('.device-card').length === 0) {
+    noDevices.style.display = '';
+  }
+
+  updateSendHint();
+
   const connectedCount = [...peers.values()].filter(p => p.ready).length;
-  setStatus(connectedCount > 0 ? 'ready' : 'waiting',
+  setStatus(
+    connectedCount > 0 ? 'ready'   : 'waiting',
     connectedCount > 0 ? `${connectedCount} device(s) connected` : 'Waiting for phones',
-    connectedCount > 0 ? 'Check devices to send' : 'Scan QR with your phone');
+    connectedCount > 0 ? 'Check devices to send' : 'Scan QR with your phone'
+  );
 }
 
 // ── Incoming data handler ─────────────────────────────────
