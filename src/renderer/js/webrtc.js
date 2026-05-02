@@ -43,6 +43,7 @@ async function handleSignaling(msg, ws) {
 async function initPeer(peerId, deviceName, ws) {
   const pc = new RTCPeerConnection({ iceServers: [] });
   const dc = pc.createDataChannel('eazyshare', { ordered: true });
+  dc.binaryType = 'arraybuffer';
 
   peers.set(peerId, { pc, dc, deviceName, ready: false, ws });
   addDeviceCard(peerId, deviceName);

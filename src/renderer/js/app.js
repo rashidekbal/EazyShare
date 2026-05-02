@@ -32,10 +32,11 @@ dom.dropZone.addEventListener('drop', (e) => {
 async function handleFiles(files) {
   const ready = [...selectedPeers].filter(id => peers.get(id)?.ready);
   if (ready.length === 0) { alert('Check at least one connected device in the sidebar.'); return; }
-  
-  const filePaths = files.map(f => f.path).filter(Boolean);
-  if (filePaths.length === 0) return;
+
+  const filePaths = files.map(f => window.electronAPI.getPathForFile(f)).filter(Boolean);
+  if (filePaths.length === 0) { alert('Could not read file path. Please try again.'); return; }
 
   const resolved = await window.electronAPI.resolveDirectories(filePaths);
   resolved.forEach(rf => ready.forEach(peerId => queueFile(rf, peerId)));
 }
+

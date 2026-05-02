@@ -1,5 +1,5 @@
 import { CHUNK_SIZE, MAX_BUFFERED, outgoing, incoming, peers } from './state.js';
-import { u8ToBase64, base64ToU8, mergeChunksDense, fmtBytes, fmtSpeed, sleep } from './utils.js';
+import { u8ToBase64, base64ToU8, fmtBytes, fmtSpeed, sleep } from './utils.js';
 import { addTransferItem, updateProgress, updateLabel, updatePauseBtn, markDone, markError } from './ui.js';
 
 export function saveState() {
@@ -57,13 +57,18 @@ export async function streamChunks(id, fromChunk = 0) {
   const peer = peers.get(state.targetPeerId);
   const dc   = peer?.dc;
 
-  let buf;
-  if (state.file) {
-    buf = await state.file.arrayBuffer();
-  } else if (state.filePath) {
-    buf = null;
-  } else {
-    updateLabel(id, '✕ File no longer available', 'error'); return;
+  // state.file may be a real browser File (with .arrayBuffer()) from drag-and-drop,
+  // OR a plain {name, size, path} object from resolveDirectories — in the latter case
+  // we must use filePath + IPC to read slices instead.
+  let buf = null;
+  if (state.file && typeof state.file.arrayBuffer === 'function') {
+    try {
+      buf = await state.file.arrayBuffer();
+    } catch (e) {
+      updateLabel(id, '✕ File read error', 'error'); state.streaming = false; return;
+    }
+  } else if (!state.filePath) {
+    updateLabel(id, '✕ File no longer available', 'error'); state.streaming = false; return;
   }
 
   for (state.nextChunk = fromChunk; state.nextChunk < state.totalChunks; ) {
@@ -77,16 +82,18 @@ export async function streamChunks(id, fromChunk = 0) {
       if (state.paused || state.cancelled || dc.readyState !== 'open') { state.streaming = false; return; }
     }
 
-    let slice;
+    let u8;
     if (buf) {
-      slice = buf.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+      u8 = new Uint8Array(buf, i * CHUNK_SIZE, Math.min(CHUNK_SIZE, state.size - i * CHUNK_SIZE));
     } else {
       const arr = await window.electronAPI.readFileSlice(state.filePath, i * CHUNK_SIZE, Math.min((i + 1) * CHUNK_SIZE, state.size));
       if (!arr) { updateLabel(id, '✕ File read error', 'error'); state.streaming = false; return; }
-      slice = new Uint8Array(arr).buffer;
+      u8 = new Uint8Array(arr);
     }
 
-    dc.send(JSON.stringify({ type: 'file-chunk', id, index: i, total: state.totalChunks, data: u8ToBase64(new Uint8Array(slice)) }));
+    // Use base64-encoded JSON so the mobile browser can handle the message
+    // without needing to deal with interleaved binary/string DataChannel messages.
+    dc.send(JSON.stringify({ type: 'file-chunk', id, index: i, total: state.totalChunks, data: u8ToBase64(u8) }));
     if (state.nextChunk === i) state.nextChunk++;
   }
 
@@ -178,55 +185,73 @@ export function cancelTransfer(id) {
   saveState();
 }
 
-export function handleIncomingChunk(id, index, dataB64, dc) {
+// ── Incoming chunk handler (phone → desktop) ────────────────────────────────
+// Handles both binary ArrayBuffer chunks (from mobile binary protocol)
+// and Uint8Array decoded from base64 (legacy/fallback path).
+function handleIncomingChunk(id, index, u8, dc) {
   const t = incoming.get(id);
   if (!t) return;
-  
-  const data = base64ToU8(dataB64);
-  if (t.tempPath && index < (t.receivedChunks || 0)) {
-    // Already have it on disk, just ack and ignore
+
+  const data = u8 instanceof Uint8Array ? u8 : new Uint8Array(u8);
+
+  if (!t.tempPath) {
+    // tempPath not yet set — buffer the chunk until incomingInit resolves
+    t.bufferedChunks = t.bufferedChunks || [];
+    t.bufferedChunks.push({ index, data });
+    return;
+  }
+
+  if (index < (t.receivedChunks || 0)) {
+    // Already persisted on disk from a previous session; just ack
     dc?.send(JSON.stringify({ type: 'file-ack', id, index }));
     return;
   }
-  
-  // Track received indices to avoid double-counting if duplicate chunks arrive
+
   t.receivedIndices = t.receivedIndices || new Set();
   if (t.receivedIndices.has(index)) {
+    // Duplicate — ack but don't double-write
     dc?.send(JSON.stringify({ type: 'file-ack', id, index }));
     return;
   }
   t.receivedIndices.add(index);
 
-  if (t.tempPath) {
-    window.electronAPI.incomingWrite({ tempPath: t.tempPath, data, index });
-    t.receivedCount++;
-    if (!t.startTime) t.startTime = Date.now();
-    
-    const elapsed = (Date.now() - t.startTime) / 1000 || 1;
-    const speed   = (t.receivedCount - (t.receivedChunks || 0)) * CHUNK_SIZE / elapsed;
-    
-    const pct = (t.receivedCount / t.total) * 100;
-    const confirmedBytes = Math.min(t.receivedCount * CHUNK_SIZE, t.size);
-    updateProgress(id, pct, `${fmtSpeed(speed)} · ${fmtBytes(confirmedBytes)} / ${fmtBytes(t.size)}`);
-    dc?.send(JSON.stringify({ type: 'file-ack', id, index }));
-  }
+  window.electronAPI.incomingWrite({ tempPath: t.tempPath, data, index });
+  t.receivedCount++;
+  if (!t.startTime) t.startTime = Date.now();
+
+  const elapsed = (Date.now() - t.startTime) / 1000 || 1;
+  const speed   = (t.receivedCount - (t.receivedChunks || 0)) * CHUNK_SIZE / elapsed;
+  const pct     = (t.receivedCount / t.total) * 100;
+  const confirmedBytes = Math.min(t.receivedCount * CHUNK_SIZE, t.size);
+  updateProgress(id, pct, `${fmtSpeed(speed)} · ${fmtBytes(confirmedBytes)} / ${fmtBytes(t.size)}`);
+  dc?.send(JSON.stringify({ type: 'file-ack', id, index }));
 }
 
 export function handleData(raw, peerId, deviceName) {
-  const msg = JSON.parse(raw);
   const peer = peers.get(peerId);
-  const dc   = peer?.dc;
+  if (!peer) return;
+  const dc = peer.dc;
+
+  // ── Binary frame: part of the phone→desktop binary chunk protocol ──
+  if (typeof raw !== 'string') {
+    if (peer.pendingChunk) {
+      handleIncomingChunk(peer.pendingChunk.id, peer.pendingChunk.index, raw, dc);
+      peer.pendingChunk = null;
+    }
+    return;
+  }
+
+  const msg = JSON.parse(raw);
 
   switch (msg.type) {
     case 'file-start': {
-      // ── Cleanup stale entry for same file from same device (if ID changed) ──
+      // Cleanup stale entry for same file from same device (if ID changed)
       const staleId = [...incoming.entries()].find(([sid, st]) => 
         sid !== msg.id && st.name === msg.name && st.size === msg.size && st.sourcePeerId === peerId
       )?.[0];
       if (staleId) {
         incoming.delete(staleId);
-        const oldEl = document.getElementById(`ti-${staleId}`);
-        if (oldEl) oldEl.remove();
+        document.getElementById(`ti-${staleId}`)?.remove();
       }
 
       if (!incoming.has(msg.id)) {
@@ -246,6 +271,7 @@ export function handleData(raw, peerId, deviceName) {
         }
         dc?.send(JSON.stringify({ type: 'file-resume-request', id: msg.id, fromChunk: receivedChunks }));
 
+        // Flush any chunks that arrived before tempPath was ready
         if (t.bufferedChunks) {
           t.receivedIndices = t.receivedIndices || new Set();
           t.bufferedChunks.forEach(c => {
@@ -260,17 +286,16 @@ export function handleData(raw, peerId, deviceName) {
       });
       break;
     }
-    case 'file-chunk': {
+    // ── Binary-protocol meta frame (phone → desktop) ──
+    case 'file-chunk-meta': {
       const t = incoming.get(msg.id);
       if (!t) return;
-      
-      if (!t.tempPath) {
-        t.bufferedChunks = t.bufferedChunks || [];
-        t.bufferedChunks.push({ index: msg.index, data: msg.data });
-        return;
-      }
-      
-      handleIncomingChunk(msg.id, msg.index, msg.data, dc);
+      peer.pendingChunk = msg;
+      break;
+    }
+    // ── Base64 chunk frame (phone → desktop, legacy / small payloads) ──
+    case 'file-chunk': {
+      handleIncomingChunk(msg.id, msg.index, base64ToU8(msg.data), dc);
       break;
     }
     case 'file-done': {
@@ -346,7 +371,7 @@ export function handleData(raw, peerId, deviceName) {
       const t = outgoing.get(msg.id);
       if (!t || t.done || t.cancelled) return;
       t.nextChunk = msg.fromChunk || 0;
-      t.ackedCount = t.nextChunk; // Sync ackedCount
+      t.ackedCount = t.nextChunk;
       
       const pct = (t.ackedCount / t.totalChunks) * 100;
       const confirmedBytes = Math.min(t.ackedCount * CHUNK_SIZE, t.size);

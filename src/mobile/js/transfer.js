@@ -63,7 +63,8 @@ export async function streamChunks(id, fromChunk = 0) {
     }
     const blob  = s.file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
     const slice = await blob.arrayBuffer();
-    state.dc.send(JSON.stringify({ type: 'file-chunk', id, index: i, total: s.totalChunks, data: u8ToB64(new Uint8Array(slice)) }));
+    state.dc.send(JSON.stringify({ type: 'file-chunk-meta', id, index: i, total: s.totalChunks }));
+    state.dc.send(slice);
     if (s.nextChunk === i) s.nextChunk++;
   }
   state.dc.send(JSON.stringify({ type: 'file-done', id }));
@@ -115,8 +116,26 @@ export function cancelTransfer(id) {
   if (state.dc?.readyState === 'open') state.dc.send(JSON.stringify({ type: 'file-cancel', id }));
 }
 
+function handleIncomingChunk(id, index, data) {
+  const t = incoming.get(id); if (!t) return;
+  t.chunks[index] = data instanceof Uint8Array ? data : new Uint8Array(data);
+  const done  = t.chunks.filter(Boolean).length;
+  if (!t.startTime) t.startTime = Date.now();
+  const speed = (done * CHUNK_SIZE) / ((Date.now() - t.startTime) / 1000 || 1);
+  const confirmed = Math.min(done * CHUNK_SIZE, t.size);
+  updateProg(id, (done / t.total) * 100, `${fmtSpeed(speed)} · ${fmtBytes(confirmed)} / ${fmtBytes(t.size)}`);
+  state.dc.send(JSON.stringify({ type: 'file-ack', id, index }));
+}
+
 export function handleData(raw) {
   try {
+    if (typeof raw !== 'string') {
+      if (state.pendingChunk) {
+        handleIncomingChunk(state.pendingChunk.id, state.pendingChunk.index, raw);
+        state.pendingChunk = null;
+      }
+      return;
+    }
     const msg = JSON.parse(raw);
     if (!msg || !msg.id) return;
     switch (msg.type) {
@@ -135,19 +154,19 @@ export function handleData(raw) {
         incoming.set(msg.id, { name: msg.name, size: msg.size, total: msg.totalChunks, chunks: [], startTime: Date.now() });
         addItem(msg.id, msg.name, msg.size, 'receive');
       }
-      const received = incoming.get(msg.id).chunks ? incoming.get(msg.id).chunks.filter(Boolean).length : 0;
+      const t = incoming.get(msg.id);
+      const received = t.chunks ? t.chunks.filter(Boolean).length : 0;
       state.dc.send(JSON.stringify({ type: 'file-resume-request', id: msg.id, fromChunk: received }));
       break;
     }
+    case 'file-chunk-meta': {
+      const t = incoming.get(msg.id);
+      if (!t) return;
+      state.pendingChunk = msg;
+      break;
+    }
     case 'file-chunk': {
-      const t = incoming.get(msg.id); if (!t) return;
-      t.chunks[msg.index] = b64ToU8(msg.data);
-      const done  = t.chunks.filter(Boolean).length;
-      if (!t.startTime) t.startTime = Date.now();
-      const speed = (done * CHUNK_SIZE) / ((Date.now() - t.startTime) / 1000 || 1);
-      const confirmed = Math.min(done * CHUNK_SIZE, t.size);
-      updateProg(msg.id, (done / t.total) * 100, `${fmtSpeed(speed)} · ${fmtBytes(confirmed)} / ${fmtBytes(t.size)}`);
-      state.dc.send(JSON.stringify({ type: 'file-ack', id: msg.id, index: msg.index }));
+      handleIncomingChunk(msg.id, msg.index, b64ToU8(msg.data));
       break;
     }
     case 'file-done': {

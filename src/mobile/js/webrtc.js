@@ -69,7 +69,11 @@ export async function handleOffer(sdp) {
   state.pc.onicecandidate = ({ candidate }) => {
     if (candidate && state.desktopId) state.ws.send(JSON.stringify({ type: 'ice-candidate', candidate, target: state.desktopId }));
   };
-  state.pc.ondatachannel = (e) => { state.dc = e.channel; setupDC(state.dc); };
+  state.pc.ondatachannel = (e) => { 
+    state.dc = e.channel; 
+    state.dc.binaryType = 'arraybuffer';
+    setupDC(state.dc); 
+  };
 
   await state.pc.setRemoteDescription(new RTCSessionDescription(sdp));
   const answer = await state.pc.createAnswer();

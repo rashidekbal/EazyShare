@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // App init
@@ -34,4 +34,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Directories resolution
   resolveDirectories: (filePaths) => ipcRenderer.invoke('file:resolve-directories', filePaths),
+
+  // Get absolute filesystem path from a File object (Electron 26+ replacement for file.path)
+  getPathForFile: (file) => webUtils.getPathForFile(file),
 });
