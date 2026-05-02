@@ -6,6 +6,7 @@ let wss = null;
 const clients = new Map();
 
 function startSignalingServer(port) {
+  const cooldowns = new Map();
   wss = new WebSocket.Server({ port }, () => {
     console.log(`[WS] Signaling server on port ${port}`);
   });
@@ -20,29 +21,26 @@ function startSignalingServer(port) {
 
         // ── Registration ──────────────────────────────────────
         if (msg.type === 'register') {
+          const now = Date.now();
+          if (cooldowns.get(msg.id) && now - cooldowns.get(msg.id) < 2000) {
+            console.log(`[WS] Throttling rapid registration for ${msg.id}`);
+            return;
+          }
+          cooldowns.set(msg.id, now);
+
+          if (clientId) return; // Already registered on this socket
           clientId   = msg.id;
           clientType = msg.clientType;
           const deviceName = msg.deviceName || 'Unknown Device';
 
-          // ── Evict stale client with same name+type (phone refresh) ──
-          // If phone refreshes, it gets a new random ID but the same device name.
-          // The old WS stays open until TCP timeout — we close it immediately.
-          for (const [oldId, oldClient] of clients) {
-            if (oldClient.type === clientType && oldClient.deviceName === deviceName && oldId !== clientId) {
-              console.log(`[WS] Evicting stale "${deviceName}" (${oldId}) — replaced by ${clientId}`);
-              // Notify opposite side the old peer is gone
-              broadcastToOpposite(clientType, {
-                type:       'peer-disconnected',
-                peerType:   clientType,
-                peerId:     oldId,
-                deviceName: oldClient.deviceName,
-              });
-              clients.delete(oldId);
-              // Force-close the stale socket (silently)
-              try { oldClient.ws.terminate(); } catch (_) {}
-            }
+          // ── Evict stale client with SAME ID but DIFFERENT socket ──
+          const existing = clients.get(clientId);
+          if (existing && existing.ws !== ws) {
+            console.log(`[WS] Evicting stale "${deviceName}" (${clientId}) — socket mismatch`);
+            try { existing.ws.terminate(); } catch (_) {}
+            clients.delete(clientId);
           }
-
+          
           clients.set(clientId, { ws, type: clientType, deviceName });
           console.log(`[WS] + ${clientType} "${deviceName}" (${clientId})`);
 
@@ -83,14 +81,16 @@ function startSignalingServer(port) {
     ws.on('close', () => {
       if (!clientId) return;
       const info = clients.get(clientId);
-      clients.delete(clientId);
-      console.log(`[WS] - ${clientType} "${info?.deviceName}" (${clientId})`);
-      broadcastToOpposite(clientType, {
-        type:       'peer-disconnected',
-        peerType:   clientType,
-        peerId:     clientId,
-        deviceName: info?.deviceName || 'Unknown',
-      });
+      if (info && info.ws === ws) {
+        clients.delete(clientId);
+        console.log(`[WS] - ${clientType} "${info?.deviceName}" (${clientId})`);
+        broadcastToOpposite(clientType, {
+          type:       'peer-disconnected',
+          peerType:   clientType,
+          peerId:     clientId,
+          deviceName: info?.deviceName || 'Unknown',
+        });
+      }
     });
 
     ws.on('error', (err) => console.error('[WS] Client error:', err.message));

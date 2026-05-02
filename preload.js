@@ -10,13 +10,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   close:       () => ipcRenderer.send('win:close'),
 
   // File I/O
-  saveFile:    (name, arrayBuffer, deviceName) =>
+  saveFile:    (name, uint8Array, deviceName) =>
     ipcRenderer.invoke('file:save', {
       name,
-      data: Array.from(new Uint8Array(arrayBuffer)),
+      data: uint8Array,
       deviceName,
     }),
   openFolder:  (deviceName) => ipcRenderer.invoke('file:open-folder', deviceName),
+  
+  // Incoming Transfers
+  incomingInit:   (info) => ipcRenderer.invoke('file:incoming-init', info),
+  incomingWrite:  (info) => ipcRenderer.invoke('file:incoming-write', info),
+  incomingCommit: (info) => ipcRenderer.invoke('file:incoming-commit', info),
+  incomingCancel: (tempPath) => ipcRenderer.invoke('file:incoming-cancel', tempPath),
 
   // Read a byte range from a file on disk (for persisted transfer resume)
   readFileSlice: (filePath, start, end) =>
@@ -25,4 +31,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Transfer state persistence
   saveTransferState: (transfers) => ipcRenderer.send('state:save', transfers),
   loadTransferStates: ()          => ipcRenderer.invoke('state:load'),
+
+  // Directories resolution
+  resolveDirectories: (filePaths) => ipcRenderer.invoke('file:resolve-directories', filePaths),
 });

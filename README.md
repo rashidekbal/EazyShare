@@ -15,11 +15,11 @@ Scan a QR code, drop files, done. eazyShare uses WebRTC to create a direct peer-
 | 📶 **LAN only**                  | All data stays on your local network. No internet required                                   |
 | ⏸ **Pause & Resume**             | Pause any transfer and resume exactly where it stopped                                       |
 | 🔁 **Auto-resume on disconnect** | Phone drops Wi-Fi? Reconnect and transfers pick up from the last confirmed chunk             |
-| 💾 **Persist across restarts**   | Outgoing transfers are saved to disk — restart the app and resume when the device reconnects |
+| 💾 **Persist across restarts**   | Both incoming and outgoing transfers are saved to disk — resume perfectly after app restart  |
 | 📲 **Multi-device**              | Connect multiple phones simultaneously with independent transfer channels                    |
 | 📂 **Per-device folders**        | Files from each phone saved to `Downloads/EazyShare/<DeviceName>/`                           |
+| 📁 **Folder Support**            | Drop folders to recursively send all contents with structure preserved                       |
 | 🔢 **Broadcast**                 | Check multiple device checkboxes and drop once to send to all of them                        |
-| 🔔 **Tray notifications**        | Minimizes to system tray, balloon alert when files arrive                                    |
 | 🔥 **Firewall auto-config**      | On first run, offers to add Windows Firewall rules automatically (UAC prompt)                |
 
 ---
@@ -53,8 +53,7 @@ eazyShare/
 │   └── icon.ico                 # Windows installer icon
 ├── src/
 │   ├── main/                    # Electron main process (Node.js)
-│   │   ├── index.js             # App entry: window, IPC, tray, servers
-│   │   ├── tray.js              # System tray + balloon notifications
+│   │   ├── index.js             # App entry: window, IPC, servers
 │   │   ├── firewall.js          # Windows Firewall rule management
 │   │   ├── persistence.js       # Save/load transfer state across restarts
 │   │   ├── network/
@@ -142,12 +141,6 @@ Produces `dist/eazyshare Setup 1.0.0.exe` — a standard NSIS installer (~96 MB)
 - If the phone **disconnects mid-transfer**, reconnect and transfers auto-resume from the last confirmed chunk
 - If the **PC app is restarted**, incomplete transfers are restored from disk and resume when the device reconnects
 
-### System Tray
-
-- Closing the window **minimizes to tray** (sharing continues in the background)
-- **Double-click** the tray icon to restore
-- Right-click → **Open Downloads**, **Show Window**, or **Quit**
-- A balloon notification appears when a file is received
 
 ---
 
@@ -246,10 +239,8 @@ Auto-detected from the browser user agent (e.g. `iPhone`, `Android Phone`) and s
 
 ## 🐛 Known Limitations
 
-- **Windows only** — tray, firewall, and installer are Windows-specific. The core would run on macOS/Linux with minor adjustments.
+- **Windows only** — firewall, and installer are Windows-specific. The core would run on macOS/Linux with minor adjustments.
 - **Same Wi-Fi required** — devices must be on the same network segment. Enterprise networks with AP client isolation will block connections.
-- **No folder recursion** — sends individual files only; dropping a folder sends its top-level files but does not walk subdirectories.
-- **Incoming persistence (phone → PC)** — received chunks are in-memory. If the PC restarts mid-receive, the phone must resend the file from the beginning.
 
 ---
 

@@ -22,7 +22,7 @@ module.exports = {
     target: [
       { target: 'nsis', arch: ['x64'] },
     ],
-    icon: 'src/assets/icons/win/icon.ico',
+    icon: 'src/assets/icon.ico',
     requestedExecutionLevel: 'asInvoker',
   },
 
